@@ -9,10 +9,61 @@ import {
 } from "recharts";
 import "./App.css";
 
+const INCOME_CATEGORIES = [
+  "Salary",
+  "Freelance",
+  "Business",
+  "Investment",
+  "Bonus",
+  "Gift",
+  "Interest",
+  "Other Income",
+];
+
+const EXPENSE_CATEGORIES = [
+  "Food & Dining",
+  "Groceries",
+  "Transportation",
+  "Fuel",
+  "Rent",
+  "Utilities",
+  "Electricity",
+  "Internet",
+  "Mobile",
+  "Education",
+  "Healthcare",
+  "Shopping",
+  "Entertainment",
+  "Travel",
+  "Insurance",
+  "Subscriptions",
+  "Personal Care",
+  "Family",
+  "Gifts & Donations",
+  "EMI / Loan",
+  "Taxes",
+  "Other Expense",
+];
+
+const COLORS = [
+  "#2563eb",
+  "#16a34a",
+  "#dc2626",
+  "#9333ea",
+  "#ea580c",
+  "#0891b2",
+  "#ca8a04",
+  "#db2777",
+];
+
+function getToday() {
+  return new Date().toISOString().split("T")[0];
+}
+
 function App() {
-  // ==============================
+  // ============================
   // TRANSACTIONS
-  // ==============================
+  // ============================
 
   const [transactions, setTransactions] = useState([
     {
@@ -21,65 +72,83 @@ function App() {
       amount: 50000,
       type: "income",
       category: "Salary",
-      date: "2026-08-25",
+      date: getToday(),
     },
     {
       id: 2,
       description: "Groceries",
       amount: 2500,
       type: "expense",
-      category: "Food",
-      date: "2026-08-24",
+      category: "Groceries",
+      date: getToday(),
     },
     {
       id: 3,
       description: "Restaurant",
       amount: 1200,
       type: "expense",
-      category: "Food",
-      date: "2026-08-23",
+      category: "Food & Dining",
+      date: getToday(),
     },
   ]);
 
-  // ==============================
+  // ============================
   // FORM
-  // ==============================
+  // ============================
 
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [type, setType] = useState("expense");
-  const [category, setCategory] = useState("Other");
-  const [date, setDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [category, setCategory] = useState("Food & Dining");
+  const [customCategory, setCustomCategory] =
+    useState("");
+  const [date, setDate] = useState(getToday());
 
-  // Stores the ID of the transaction currently being edited
+  // ============================
+  // EDIT
+  // ============================
+
   const [editingId, setEditingId] = useState(null);
+  const [previousTransaction, setPreviousTransaction] =
+    useState(null);
 
-  // ==============================
+  // ============================
+  // UNDO
+  // ============================
+
+  const [undoData, setUndoData] = useState(null);
+  const [notification, setNotification] =
+    useState("");
+
+  // ============================
   // FILTERS
-  // ==============================
+  // ============================
 
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
-  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterCategory, setFilterCategory] =
+    useState("all");
 
-  // ==============================
-  // LOAD FROM LOCAL STORAGE
-  // ==============================
+  // ============================
+  // LOCAL STORAGE
+  // ============================
 
   useEffect(() => {
     const savedTransactions =
       localStorage.getItem("transactions");
 
     if (savedTransactions) {
-      setTransactions(JSON.parse(savedTransactions));
+      try {
+        setTransactions(
+          JSON.parse(savedTransactions)
+        );
+      } catch {
+        console.log(
+          "Unable to load saved transactions."
+        );
+      }
     }
   }, []);
-
-  // ==============================
-  // SAVE TO LOCAL STORAGE
-  // ==============================
 
   useEffect(() => {
     localStorage.setItem(
@@ -88,35 +157,73 @@ function App() {
     );
   }, [transactions]);
 
-  // ==============================
+  // ============================
+  // NOTIFICATION
+  // ============================
+
+  const showNotification = (message) => {
+    setNotification(message);
+
+    setTimeout(() => {
+      setNotification("");
+    }, 4000);
+  };
+
+  // ============================
   // TOTALS
-  // ==============================
+  // ============================
 
   const totalIncome = transactions
     .filter(
-      (transaction) => transaction.type === "income"
+      (transaction) =>
+        transaction.type === "income"
     )
     .reduce(
       (total, transaction) =>
-        total + transaction.amount,
+        total + Number(transaction.amount),
       0
     );
 
   const totalExpense = transactions
     .filter(
-      (transaction) => transaction.type === "expense"
+      (transaction) =>
+        transaction.type === "expense"
     )
     .reduce(
       (total, transaction) =>
-        total + transaction.amount,
+        total + Number(transaction.amount),
       0
     );
 
   const balance = totalIncome - totalExpense;
 
-  // ==============================
-  // ADD / UPDATE TRANSACTION
-  // ==============================
+  // ============================
+  // CATEGORY LIST
+  // ============================
+
+  const availableCategories =
+    type === "income"
+      ? INCOME_CATEGORIES
+      : EXPENSE_CATEGORIES;
+
+  // ============================
+  // CLEAR FORM
+  // ============================
+
+  const clearForm = () => {
+    setDescription("");
+    setAmount("");
+    setType("expense");
+    setCategory("Food & Dining");
+    setCustomCategory("");
+    setDate(getToday());
+    setEditingId(null);
+    setPreviousTransaction(null);
+  };
+
+  // ============================
+  // ADD / UPDATE
+  // ============================
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -126,16 +233,34 @@ function App() {
       !amount ||
       Number(amount) <= 0
     ) {
-      alert(
+      showNotification(
         "Please enter a valid description and amount."
       );
       return;
     }
 
-    // UPDATE EXISTING TRANSACTION
+    if (
+      category === "Other Expense" ||
+      category === "Other Income"
+    ) {
+      if (!customCategory.trim()) {
+        showNotification(
+          "Please specify your category."
+        );
+        return;
+      }
+    }
+
+    const finalCategory =
+      category === "Other Expense" ||
+      category === "Other Income"
+        ? customCategory.trim()
+        : category;
+
+    // UPDATE
     if (editingId !== null) {
-      setTransactions((previousTransactions) =>
-        previousTransactions.map((transaction) =>
+      setTransactions((previous) =>
+        previous.map((transaction) =>
           transaction.id === editingId
             ? {
                 ...transaction,
@@ -143,84 +268,194 @@ function App() {
                   description.trim(),
                 amount: Number(amount),
                 type,
-                category,
+                category: finalCategory,
                 date,
               }
             : transaction
         )
       );
 
-      setEditingId(null);
-    }
+      setUndoData({
+        type: "edit",
+        transaction: previousTransaction,
+      });
 
-    // ADD NEW TRANSACTION
-    else {
-      const newTransaction = {
-        id: Date.now(),
-        description: description.trim(),
-        amount: Number(amount),
-        type,
-        category,
-        date,
-      };
-
-      setTransactions(
-        (previousTransactions) => [
-          newTransaction,
-          ...previousTransactions,
-        ]
+      showNotification(
+        "Transaction updated successfully."
       );
+
+      clearForm();
+      return;
     }
+
+    // ADD
+    const newTransaction = {
+      id: Date.now(),
+      description: description.trim(),
+      amount: Number(amount),
+      type,
+      category: finalCategory,
+      date,
+    };
+
+    setTransactions((previous) => [
+      newTransaction,
+      ...previous,
+    ]);
+
+    showNotification(
+      "Transaction added successfully."
+    );
 
     clearForm();
   };
 
-  // ==============================
-  // CLEAR FORM
-  // ==============================
-
-  const clearForm = () => {
-    setDescription("");
-    setAmount("");
-    setType("expense");
-    setCategory("Other");
-    setDate(
-      new Date().toISOString().split("T")[0]
-    );
-    setEditingId(null);
-  };
-
-  // ==============================
+  // ============================
   // EDIT TRANSACTION
-  // ==============================
+  // ============================
 
   const editTransaction = (transaction) => {
     setEditingId(transaction.id);
 
+    setPreviousTransaction({
+      ...transaction,
+    });
+
     setDescription(transaction.description);
     setAmount(transaction.amount);
     setType(transaction.type);
-    setCategory(transaction.category);
     setDate(transaction.date);
+
+    const standardCategories =
+      transaction.type === "income"
+        ? INCOME_CATEGORIES
+        : EXPENSE_CATEGORIES;
+
+    if (
+      standardCategories.includes(
+        transaction.category
+      )
+    ) {
+      setCategory(transaction.category);
+      setCustomCategory("");
+    } else {
+      setCategory(
+        transaction.type === "income"
+          ? "Other Income"
+          : "Other Expense"
+      );
+
+      setCustomCategory(
+        transaction.category
+      );
+    }
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   };
 
-  // ==============================
-  // DELETE TRANSACTION
-  // ==============================
+  // ============================
+  // UNDO EDIT
+  // ============================
 
-  const deleteTransaction = (id) => {
-    setTransactions(
-      (previousTransactions) =>
-        previousTransactions.filter(
-          (transaction) =>
-            transaction.id !== id
-        )
+  const undoEdit = () => {
+    if (
+      !undoData ||
+      undoData.type !== "edit" ||
+      !undoData.transaction
+    ) {
+      return;
+    }
+
+    setTransactions((previous) =>
+      previous.map((transaction) =>
+        transaction.id ===
+        undoData.transaction.id
+          ? undoData.transaction
+          : transaction
+      )
+    );
+
+    setUndoData(null);
+
+    showNotification(
+      "Previous transaction restored."
     );
   };
 
-  // ==============================
+  // ============================
+  // DELETE
+  // ============================
+
+  const deleteTransaction = (id) => {
+    const transaction =
+      transactions.find(
+        (item) => item.id === id
+      );
+
+    if (!transaction) return;
+
+    setTransactions((previous) =>
+      previous.filter(
+        (item) => item.id !== id
+      )
+    );
+
+    setUndoData({
+      type: "delete",
+      transaction,
+    });
+
+    showNotification(
+      "Transaction deleted."
+    );
+  };
+
+  // ============================
+  // UNDO DELETE
+  // ============================
+
+  const undoDelete = () => {
+    if (
+      !undoData ||
+      undoData.type !== "delete"
+    ) {
+      return;
+    }
+
+    setTransactions((previous) => [
+      undoData.transaction,
+      ...previous,
+    ]);
+
+    setUndoData(null);
+
+    showNotification(
+      "Transaction restored successfully."
+    );
+  };
+
+  // ============================
+  // UNDO BUTTON
+  // ============================
+
+  const handleUndo = () => {
+    if (!undoData) return;
+
+    if (undoData.type === "delete") {
+      undoDelete();
+    }
+
+    if (undoData.type === "edit") {
+      undoEdit();
+    }
+  };
+
+  // ============================
   // FILTER
-  // ==============================
+  // ============================
 
   const filteredTransactions =
     transactions.filter((transaction) => {
@@ -245,9 +480,9 @@ function App() {
       );
     });
 
-  // ==============================
-  // CHART DATA
-  // ==============================
+  // ============================
+  // CHART
+  // ============================
 
   const categoryTotals = transactions
     .filter(
@@ -257,7 +492,7 @@ function App() {
     .reduce((acc, transaction) => {
       acc[transaction.category] =
         (acc[transaction.category] || 0) +
-        transaction.amount;
+        Number(transaction.amount);
 
       return acc;
     }, {});
@@ -269,9 +504,9 @@ function App() {
     value,
   }));
 
-  // ==============================
+  // ============================
   // RESET FILTERS
-  // ==============================
+  // ============================
 
   const resetFilters = () => {
     setSearch("");
@@ -279,19 +514,51 @@ function App() {
     setFilterCategory("all");
   };
 
-  // ==============================
-  // UI
-  // ==============================
+  // ============================
+  // RENDER
+  // ============================
 
   return (
     <div className="app">
 
-      <header className="header">
-        <h1>💰 Expense Tracker</h1>
+      {/* NOTIFICATION */}
 
-        <p>
-          Manage your income and expenses easily.
-        </p>
+      {notification && (
+        <div className="notification">
+          <span>{notification}</span>
+
+          {undoData && (
+            <button onClick={handleUndo}>
+              ↩ Undo
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* HEADER */}
+
+      <header className="header">
+
+        <div className="header-content">
+
+          <div>
+            <div className="logo">
+              💰
+            </div>
+
+            <div>
+              <h1>
+                Personal Expense Tracker
+              </h1>
+
+              <p>
+                Take control of your money.
+              </p>
+            </div>
+          </div>
+
+        </div>
+
       </header>
 
       <main>
@@ -301,33 +568,54 @@ function App() {
         <section className="summary">
 
           <div className="card income-card">
-            <span>💵</span>
-            <h3>Total Income</h3>
 
-            <h2>
-              Rs.{" "}
-              {totalIncome.toLocaleString()}
-            </h2>
+            <div className="card-icon">
+              💵
+            </div>
+
+            <div>
+              <p>Total Income</p>
+
+              <h2>
+                Rs.{" "}
+                {totalIncome.toLocaleString()}
+              </h2>
+            </div>
+
           </div>
 
           <div className="card expense-card">
-            <span>💸</span>
-            <h3>Total Expenses</h3>
 
-            <h2>
-              Rs.{" "}
-              {totalExpense.toLocaleString()}
-            </h2>
+            <div className="card-icon">
+              💸
+            </div>
+
+            <div>
+              <p>Total Expenses</p>
+
+              <h2>
+                Rs.{" "}
+                {totalExpense.toLocaleString()}
+              </h2>
+            </div>
+
           </div>
 
           <div className="card balance-card">
-            <span>💰</span>
-            <h3>Balance</h3>
 
-            <h2>
-              Rs.{" "}
-              {balance.toLocaleString()}
-            </h2>
+            <div className="card-icon">
+              💰
+            </div>
+
+            <div>
+              <p>Current Balance</p>
+
+              <h2>
+                Rs.{" "}
+                {balance.toLocaleString()}
+              </h2>
+            </div>
+
           </div>
 
         </section>
@@ -336,12 +624,29 @@ function App() {
 
         <section className="chart-container">
 
-          <h2>📊 Expense Overview</h2>
+          <div className="section-heading">
+
+            <div>
+              <span className="section-label">
+                ANALYTICS
+              </span>
+
+              <h2>
+                Expense Overview
+              </h2>
+            </div>
+
+            <span className="chart-total">
+              Rs.{" "}
+              {totalExpense.toLocaleString()}
+            </span>
+
+          </div>
 
           {chartData.length === 0 ? (
-            <p className="empty-message">
+            <div className="empty-message">
               No expense data available.
-            </p>
+            </div>
           ) : (
             <ResponsiveContainer
               width="100%"
@@ -355,18 +660,24 @@ function App() {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={110}
+                  outerRadius={105}
+                  innerRadius={55}
+                  paddingAngle={3}
                   label
                 >
-
                   {chartData.map(
                     (entry, index) => (
                       <Cell
                         key={`cell-${index}`}
+                        fill={
+                          COLORS[
+                            index %
+                              COLORS.length
+                          ]
+                        }
                       />
                     )
                   )}
-
                 </Pie>
 
                 <Tooltip
@@ -385,7 +696,7 @@ function App() {
 
         </section>
 
-        {/* CONTENT */}
+        {/* MAIN GRID */}
 
         <section className="content">
 
@@ -393,11 +704,23 @@ function App() {
 
           <div className="form-container">
 
-            <h2>
-              {editingId !== null
-                ? "✏️ Edit Transaction"
-                : "➕ Add Transaction"}
-            </h2>
+            <div className="section-heading">
+
+              <div>
+                <span className="section-label">
+                  {editingId !== null
+                    ? "EDIT"
+                    : "NEW TRANSACTION"}
+                </span>
+
+                <h2>
+                  {editingId !== null
+                    ? "Edit Transaction"
+                    : "Add Transaction"}
+                </h2>
+              </div>
+
+            </div>
 
             <form onSubmit={handleSubmit}>
 
@@ -422,6 +745,7 @@ function App() {
 
               <input
                 type="number"
+                min="0"
                 placeholder="e.g. 2500"
                 value={amount}
                 onChange={(e) =>
@@ -435,9 +759,24 @@ function App() {
 
               <select
                 value={type}
-                onChange={(e) =>
-                  setType(e.target.value)
-                }
+                onChange={(e) => {
+                  const newType =
+                    e.target.value;
+
+                  setType(newType);
+
+                  if (newType === "income") {
+                    setCategory(
+                      "Salary"
+                    );
+                  } else {
+                    setCategory(
+                      "Food & Dining"
+                    );
+                  }
+
+                  setCustomCategory("");
+                }}
               >
                 <option value="expense">
                   Expense
@@ -460,30 +799,43 @@ function App() {
                   )
                 }
               >
-                <option value="Food">
-                  Food
-                </option>
-
-                <option value="Transport">
-                  Transport
-                </option>
-
-                <option value="Shopping">
-                  Shopping
-                </option>
-
-                <option value="Salary">
-                  Salary
-                </option>
-
-                <option value="Bills">
-                  Bills
-                </option>
-
-                <option value="Other">
-                  Other
-                </option>
+                {availableCategories.map(
+                  (item) => (
+                    <option
+                      key={item}
+                      value={item}
+                    >
+                      {item}
+                    </option>
+                  )
+                )}
               </select>
+
+              {/* CUSTOM CATEGORY */}
+
+              {(category ===
+                "Other Expense" ||
+                category ===
+                  "Other Income") && (
+                <>
+                  <label>
+                    Specify Category
+                  </label>
+
+                  <input
+                    type="text"
+                    placeholder="e.g. Pet Care"
+                    value={
+                      customCategory
+                    }
+                    onChange={(e) =>
+                      setCustomCategory(
+                        e.target.value
+                      )
+                    }
+                  />
+                </>
+              )}
 
               <label>
                 Date
@@ -498,18 +850,18 @@ function App() {
               />
 
               <button
-                className="add-btn"
+                className="primary-btn"
                 type="submit"
               >
                 {editingId !== null
-                  ? "Update Transaction"
-                  : "Add Transaction"}
+                  ? "✓ Update Transaction"
+                  : "+ Add Transaction"}
               </button>
 
               {editingId !== null && (
                 <button
                   type="button"
-                  className="cancel-btn"
+                  className="secondary-btn"
                   onClick={clearForm}
                 >
                   Cancel Edit
@@ -524,7 +876,23 @@ function App() {
 
           <div className="transactions">
 
-            <h2>📋 Transactions</h2>
+            <div className="section-heading">
+
+              <div>
+                <span className="section-label">
+                  RECORDS
+                </span>
+
+                <h2>
+                  Transactions
+                </h2>
+              </div>
+
+              <span className="transaction-count">
+                {filteredTransactions.length}
+              </span>
+
+            </div>
 
             {/* FILTERS */}
 
@@ -532,7 +900,7 @@ function App() {
 
               <input
                 type="text"
-                placeholder="🔍 Search..."
+                placeholder="🔍 Search transactions..."
                 value={search}
                 onChange={(e) =>
                   setSearch(e.target.value)
@@ -572,29 +940,17 @@ function App() {
                   All Categories
                 </option>
 
-                <option value="Food">
-                  Food
-                </option>
-
-                <option value="Transport">
-                  Transport
-                </option>
-
-                <option value="Shopping">
-                  Shopping
-                </option>
-
-                <option value="Salary">
-                  Salary
-                </option>
-
-                <option value="Bills">
-                  Bills
-                </option>
-
-                <option value="Other">
-                  Other
-                </option>
+                {[
+                  ...INCOME_CATEGORIES,
+                  ...EXPENSE_CATEGORIES,
+                ].map((item) => (
+                  <option
+                    key={item}
+                    value={item}
+                  >
+                    {item}
+                  </option>
+                ))}
 
               </select>
 
@@ -607,89 +963,110 @@ function App() {
 
             </div>
 
-            {/* TRANSACTION LIST */}
+            {/* LIST */}
 
-            {filteredTransactions.length ===
-            0 ? (
-              <p className="empty-message">
-                No transactions found.
-              </p>
-            ) : (
-              filteredTransactions.map(
-                (transaction) => (
+            <div className="transaction-list">
 
-                  <div
-                    className="transaction"
-                    key={transaction.id}
-                  >
+              {filteredTransactions.length ===
+              0 ? (
+                <div className="empty-message">
+                  No transactions found.
+                </div>
+              ) : (
+                filteredTransactions.map(
+                  (transaction) => (
+                    <div
+                      className="transaction"
+                      key={transaction.id}
+                    >
 
-                    <div className="transaction-info">
+                      <div className="transaction-left">
 
-                      <h3>
-                        {
-                          transaction.description
-                        }
-                      </h3>
-
-                      <p>
-                        {transaction.category}
-                        {" • "}
-                        {transaction.date}
-                      </p>
-
-                    </div>
-
-                    <div className="transaction-right">
-
-                      <strong
-                        className={
-                          transaction.type ===
+                        <div
+                          className={`transaction-icon ${
+                            transaction.type
+                          }`}
+                        >
+                          {transaction.type ===
                           "income"
-                            ? "amount-income"
-                            : "amount-expense"
-                        }
-                      >
-                        {transaction.type ===
-                        "income"
-                          ? "+"
-                          : "-"}{" "}
-                        Rs.{" "}
-                        {transaction.amount.toLocaleString()}
-                      </strong>
+                            ? "↗"
+                            : "↘"}
+                        </div>
 
-                      <div className="action-buttons">
+                        <div>
+                          <h3>
+                            {
+                              transaction.description
+                            }
+                          </h3>
 
-                        <button
-                          className="edit-btn"
-                          onClick={() =>
-                            editTransaction(
-                              transaction
-                            )
+                          <p>
+                            {
+                              transaction.category
+                            }{" "}
+                            •{" "}
+                            {
+                              transaction.date
+                            }
+                          </p>
+                        </div>
+
+                      </div>
+
+                      <div className="transaction-right">
+
+                        <strong
+                          className={
+                            transaction.type ===
+                            "income"
+                              ? "amount-income"
+                              : "amount-expense"
                           }
                         >
-                          Edit
-                        </button>
+                          {transaction.type ===
+                          "income"
+                            ? "+"
+                            : "-"}{" "}
+                          Rs.{" "}
+                          {Number(
+                            transaction.amount
+                          ).toLocaleString()}
+                        </strong>
 
-                        <button
-                          className="delete-btn"
-                          onClick={() =>
-                            deleteTransaction(
-                              transaction.id
-                            )
-                          }
-                        >
-                          Delete
-                        </button>
+                        <div className="action-buttons">
+
+                          <button
+                            className="edit-btn"
+                            onClick={() =>
+                              editTransaction(
+                                transaction
+                              )
+                            }
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            className="delete-btn"
+                            onClick={() =>
+                              deleteTransaction(
+                                transaction.id
+                              )
+                            }
+                          >
+                            Delete
+                          </button>
+
+                        </div>
 
                       </div>
 
                     </div>
-
-                  </div>
-
+                  )
                 )
-              )
-            )}
+              )}
+
+            </div>
 
           </div>
 
@@ -697,10 +1074,40 @@ function App() {
 
       </main>
 
+      {/* DEVELOPER */}
+
       <footer>
-        <p>
-          Expense Tracker • Built with React.js
+
+        <div className="developer">
+
+          <div className="developer-avatar">
+            KG
+          </div>
+
+          <div>
+            <p>
+              Personal Expense Tracker
+            </p>
+
+            <span>
+              Developed by{" "}
+              <strong>
+                Kiran Gajmer
+              </strong>
+            </span>
+
+            <small>
+              Built with React.js
+            </small>
+          </div>
+
+        </div>
+
+        <p className="copyright">
+          © {new Date().getFullYear()} Kiran
+          Gajmer. All rights reserved.
         </p>
+
       </footer>
 
     </div>
